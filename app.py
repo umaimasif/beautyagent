@@ -40,38 +40,56 @@ st.title("✨ Interactive Beauty Agent")
 
 # --- CORE LOGIC FUNCTIONS ---
 def get_analysis(img_path):
-    base_options = python.BaseOptions(model_asset_path='face_landmarker.task')
+    # 1. Use absolute pathing for Streamlit Cloud stability
+    # This finds the file in the same folder as your app.py
+    base_path = os.path.dirname(__file__)
+    model_path = os.path.join(base_path, 'face_landmarker.task')
+    
+    # Safety check: Display an error if the file is missing in GitHub
+    if not os.path.exists(model_path):
+        st.error(f"Model file not found at: {model_path}. Please ensure 'face_landmarker.task' is in your GitHub root.")
+        return None, None
+
+    # 2. Initialize with the corrected path
+    base_options = python.BaseOptions(model_asset_path=model_path)
     options = vision.FaceLandmarkerOptions(base_options=base_options, num_faces=1)
-    detector = vision.FaceLandmarker.create_from_options(options)
     
-    mp_image = mp.Image.create_from_file(img_path)
-    result = detector.detect(mp_image)
-    
-    if not result.face_landmarks: return None, None
+    # Use context manager (with) to ensure the detector is closed properly
+    try:
+        with vision.FaceLandmarker.create_from_options(options) as detector:
+            mp_image = mp.Image.create_from_file(img_path)
+            result = detector.detect(mp_image)
+            
+            if not result.face_landmarks: 
+                return None, None
 
-    landmarks = result.face_landmarks[0]
-    h, w = mp_image.height, mp_image.width
-    def pt(i): return np.array([landmarks[i].x * w, landmarks[i].y * h])
+            landmarks = result.face_landmarks[0]
+            h, w = mp_image.height, mp_image.width
+            def pt(i): return np.array([landmarks[i].x * w, landmarks[i].y * h])
 
-    # Analysis
-    f_h = np.linalg.norm(pt(10) - pt(152))
-    c_w = np.linalg.norm(pt(234) - pt(454))
-    j_w = np.linalg.norm(pt(58) - pt(288))
-    
-    ratio = f_h / c_w
-    if ratio > 1.5: shape = "Oval"
-    elif j_w > (c_w * 0.85): shape = "Square"
-    elif c_w > (f_h * 0.9): shape = "Round"
-    else: shape = "Heart"
+            # --- YOUR ORIGINAL ANALYSIS LOGIC ---
+            f_h = np.linalg.norm(pt(10) - pt(152))
+            c_w = np.linalg.norm(pt(234) - pt(454))
+            j_w = np.linalg.norm(pt(58) - pt(288))
+            
+            ratio = f_h / c_w
+            if ratio > 1.5: shape = "Oval"
+            elif j_w > (c_w * 0.85): shape = "Square"
+            elif c_w > (f_h * 0.9): shape = "Round"
+            else: shape = "Heart"
 
-    raw_img = cv2.imread(img_path)
-    cheek = pt(205)
-    sample = raw_img[int(cheek[1])-5:int(cheek[1])+5, int(cheek[0])-5:int(cheek[0])+5]
-    avg = np.mean(sample, axis=(0, 1))
-    hex_val = '#{:02x}{:02x}{:02x}'.format(int(avg[2]), int(avg[1]), int(avg[0]))
-    
-    return shape, hex_val
-
+            raw_img = cv2.imread(img_path)
+            cheek = pt(205)
+            sample = raw_img[max(0, int(cheek[1])-5):min(h, int(cheek[1])+5), 
+                             max(0, int(cheek[0])-5):min(w, int(cheek[0])+5)]
+            avg = np.mean(sample, axis=(0, 1))
+            hex_val = '#{:02x}{:02x}{:02x}'.format(int(avg[2]), int(avg[1]), int(avg[0]))
+            
+            return shape, hex_val
+            
+    except Exception as e:
+        st.error(f"MediaPipe Initialization Error: {e}")
+        return None, None
 # --- MAIN UI ---
 uploaded_file = st.file_uploader("Upload your photo to begin", type=["jpg", "png", "jpeg"])
 
