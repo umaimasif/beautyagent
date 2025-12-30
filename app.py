@@ -16,7 +16,18 @@ llm = ChatGroq(
     api_key=groq_api_key
 )
 st.set_page_config(page_title="Beauty Agent", layout="wide")
+import os
+from pathlib import Path
 
+# Get the directory where app.py is located
+base_path = Path(__file__).parent
+model_path = str(base_path / "face_landmarker.task")
+
+# Check if file exists before running to debug
+if not os.path.exists(model_path):
+    st.error(f"Model file NOT found at {model_path}. Please ensure it is in your GitHub repo root.")
+else:
+    base_options = python.BaseOptions(model_asset_path=model_path)
 # Custom CSS for horizontal styling
 st.markdown("""
     <style>
